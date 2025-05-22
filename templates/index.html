@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Visor Nuevo - Riesgo Hídrico</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    html, body, #map {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
+    .legend {
+      background: white;
+      padding: 10px;
+      line-height: 18px;
+      color: #333;
+      box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+      font: 14px Arial, sans-serif;
+    }
+
+    .legend i {
+      float: left;
+      width: 18px;
+      height: 18px;
+      margin-right: 8px;
+      opacity: 0.8;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([-27.45, -58.98], 8);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      minZoom: 7,
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Colores según tipo de riesgo
+    function getColor(riesgo) {
+      switch (riesgo) {
+        case "Riesgo Severo de Inundación": return "#002060";  // Azul oscuro
+        case "Riesgo  Alto de Inundación": return "#C00000";   // Rojo
+        case "Riesgo Moderado de Inundación": return "#FF8000"; // Naranja
+        case "Riesgo  Leve de Inundación": return "#FFFF00";   // Amarillo
+        default: return "#CCCCCC";
+      }
+    }
+
+    let geojsonLayer;
+
+    function loadData() {
+      const bounds = map.getBounds();
+      const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(',');
+
+      fetch(`http://127.0.0.1:5000/data?bbox=${bbox}`)
+        .then(res => res.json())
+        .then(data => {
+          if (geojsonLayer) {
+            map.removeLayer(geojsonLayer);
+          }
+
+          geojsonLayer = L.geoJSON(data, {
+            style: feature => ({
+              color: getColor(feature.properties.riesgo),
+              weight: 1,
+              opacity: 1,
+              fillOpacity: 0.6
+            }),
+            onEachFeature: (feature, layer) => {
+              layer.bindPopup(`Riesgo: ${feature.properties.riesgo}`);
+            }
+          }).addTo(map);
+        })
+        .catch(err => console.error("Error al cargar datos:", err));
+    }
+
+    map.on('moveend', loadData);
+    loadData();
+
+    // Geolocalización
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(pos => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        map.setView([lat, lon], 12);
+        L.marker([lat, lon]).addTo(map).bindPopup("Estás aquí").openPopup();
+      });
+    }
+
+    // Leyenda oficial
+    const legend = L.control({ position: 'bottomright' });
+
+    legend.onAdd = function () {
+      const div = L.DomUtil.create('div', 'info legend');
+      div.innerHTML += `<strong>Administración Provincial del Agua</strong><br>`;
+      div.innerHTML += `Zonas de Riesgo Hídrico<br><br>`;
+
+      const niveles = [
+        { label: "Riesgo Severo de Inundación", color: "#002060" },
+        { label: "Riesgo  Alto de Inundación", color: "#C00000" },
+        { label: "Riesgo Moderado de Inundación", color: "#FF8000" },
+        { label: "Riesgo  Leve de Inundación", color: "#FFFF00" }
+      ];
+
+      niveles.forEach(n => {
+        div.innerHTML += `<i style="background:${n.color}"></i>${n.label}<br>`;
+      });
+
+      return div;
+    };
+
+    legend.addTo(map);
+  </script>
+</body>
+</html>
